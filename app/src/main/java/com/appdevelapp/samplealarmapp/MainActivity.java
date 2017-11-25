@@ -1,22 +1,39 @@
 package com.appdevelapp.samplealarmapp;
 
+import android.Manifest;
+import android.annotation.TargetApi;
+import android.app.Activity;
+import android.app.AlertDialog;
+import android.content.ContentResolver;
+import android.content.ContentValues;
 import android.content.DialogInterface;
+import android.content.pm.PackageManager;
+import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
+import android.provider.CalendarContract;
+import android.support.v4.app.ActivityCompat;
+import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
+import android.widget.Toast;
 
 import com.wdullaer.materialdatetimepicker.date.DatePickerDialog;
 import com.wdullaer.materialdatetimepicker.time.TimePickerDialog;
 
 import java.util.Calendar;
+import java.util.TimeZone;
 
 public class MainActivity extends AppCompatActivity implements DatePickerDialog.OnDateSetListener, TimePickerDialog.OnTimeSetListener {
 
     private static final String CLASS_TAG = MainActivity.class.getSimpleName();
 
-    Button mshowDateTimeDialogButton;
+    public static final int MY_PERMISSIONS_REQUEST_WRITE_CALENDAR = 123;
+    Button mShowDateTimeDialogButton;
+
+    Calendar timeSelected = null;
 
     int year;
     int month;
@@ -24,13 +41,15 @@ public class MainActivity extends AppCompatActivity implements DatePickerDialog.
     int hour;
     int minute;
 
+    final static int req1=1;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        mshowDateTimeDialogButton = findViewById(R.id.btn_show_dateTimePicker);
-        mshowDateTimeDialogButton.setOnClickListener(new View.OnClickListener() {
+        mShowDateTimeDialogButton = findViewById(R.id.btn_show_dateTimePicker);
+        mShowDateTimeDialogButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 Log.d(CLASS_TAG, "Button Clicked");
@@ -99,5 +118,110 @@ public class MainActivity extends AppCompatActivity implements DatePickerDialog.
 
     private void setAlarm(){
         Log.d(CLASS_TAG, "Setting Alarm");
+        Calendar cal = Calendar.getInstance();
+        cal.set(this.year, this.month, this.day, this.hour, this.minute, 0);
+        timeSelected = cal;
+        setAlarm(cal);
+    }
+
+    private void setAlarm(Calendar target){
+
+        boolean result = checkCalendarPermission();
+
+        if (result){
+            writeCalendarEvent(target);
+        }
+        else {
+            Toast.makeText(MainActivity.this, "Your permissions are required to create reminder in your calendar", Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private void writeCalendarEvent(Calendar target) {
+        ContentResolver contentResolver = getContentResolver();
+        final ContentValues event = new ContentValues();
+        event.put(CalendarContract.Events.CALENDAR_ID, 1);
+        event.put(CalendarContract.Events.TITLE, "title");
+        event.put(CalendarContract.Events.DESCRIPTION, "description");
+        event.put(CalendarContract.Events.EVENT_LOCATION, "location");
+        event.put(CalendarContract.Events.DTSTART, target.getTimeInMillis());//startTimeMillis
+        event.put(CalendarContract.Events.DTEND, target.getTimeInMillis() + (30 * 60 * 1000));//endTimeMillis
+        event.put(CalendarContract.Events.ALL_DAY, 0);
+        event.put(CalendarContract.Events.HAS_ALARM, 1);
+        String timeZone = TimeZone.getDefault().getID();
+        event.put(CalendarContract.Events.EVENT_TIMEZONE, timeZone);
+        Uri baseUri;
+        if (Build.VERSION.SDK_INT >= 8) {
+            baseUri = CalendarContract.Events.CONTENT_URI;
+        } else {
+            baseUri = Uri.parse("content://calendar/events");
+        }
+
+        final Uri uri = contentResolver.insert(baseUri, event);
+        int dbId = Integer.parseInt(uri.getLastPathSegment());
+
+        ContentValues reminders = new ContentValues();
+        reminders.put(CalendarContract.Reminders.EVENT_ID, dbId);
+        reminders.put(CalendarContract.Reminders.METHOD, CalendarContract.Reminders.METHOD_DEFAULT);
+        reminders.put(CalendarContract.Reminders.MINUTES, 0);
+
+        final Uri reminder = contentResolver.insert(CalendarContract.Reminders.CONTENT_URI, reminders);
+
+        int added = Integer.parseInt(reminder.getLastPathSegment());
+
+        if(added > 0) {
+            Toast.makeText(getApplicationContext(), "Reminder Created", Toast.LENGTH_SHORT).show();
+        }
+        else{
+            Toast.makeText(getApplicationContext(), "Failed to create Reminder", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    @TargetApi(Build.VERSION_CODES.JELLY_BEAN)
+    private boolean checkCalendarPermission(){
+        int currentAPIVersion = Build.VERSION.SDK_INT;
+        if(currentAPIVersion>= Build.VERSION_CODES.KITKAT){
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_CALENDAR) != PackageManager.PERMISSION_GRANTED) {
+                if (ActivityCompat.shouldShowRequestPermissionRationale((Activity) MainActivity.this, Manifest.permission.WRITE_CALENDAR)) {
+                    AlertDialog.Builder alertBuilder = new AlertDialog.Builder(MainActivity.this);
+                    alertBuilder.setCancelable(true);
+                    alertBuilder.setTitle("Calendar Permission Required");
+                    alertBuilder.setMessage("Write calendar permission is necessary to create reminders in your calendar!!!");
+                    alertBuilder.setPositiveButton(android.R.string.yes, new DialogInterface.OnClickListener() {
+                        @TargetApi(Build.VERSION_CODES.JELLY_BEAN)
+                        public void onClick(DialogInterface dialog, int which) {
+                            ActivityCompat.requestPermissions((Activity) MainActivity.this, new String[]{Manifest.permission.WRITE_CALENDAR}, MY_PERMISSIONS_REQUEST_WRITE_CALENDAR);
+                        }
+                    });
+                    AlertDialog alert = alertBuilder.create();
+                    alert.show();
+                } else {
+                    ActivityCompat.requestPermissions((Activity)MainActivity.this, new String[]{Manifest.permission.WRITE_CALENDAR}, MY_PERMISSIONS_REQUEST_WRITE_CALENDAR);
+                }
+                return false;
+            } else {
+                return true;
+            }
+        } else {
+            return true;
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        switch (requestCode) {
+            case MY_PERMISSIONS_REQUEST_WRITE_CALENDAR:
+                if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                    if (timeSelected != null) {
+                        writeCalendarEvent(timeSelected);
+                    }
+                    else{
+                        Toast.makeText(MainActivity.this, "Permission granted. Please click the button to create a reminder in your Calendar", Toast.LENGTH_LONG).show();
+                    }
+                } else {
+                    //code for deny
+                    Toast.makeText(MainActivity.this, "Your permissions are required to create reminder in your calendar", Toast.LENGTH_LONG).show();
+                }
+                break;
+        }
     }
 }
