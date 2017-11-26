@@ -161,7 +161,7 @@ public class MainActivity extends AppCompatActivity implements DatePickerDialog.
 
         ContentValues reminders = new ContentValues();
         reminders.put(CalendarContract.Reminders.EVENT_ID, dbId);
-        reminders.put(CalendarContract.Reminders.METHOD, CalendarContract.Reminders.METHOD_DEFAULT);
+        reminders.put(CalendarContract.Reminders.METHOD, CalendarContract.Reminders.METHOD_ALERT);
         reminders.put(CalendarContract.Reminders.MINUTES, 0);
 
         final Uri reminder = contentResolver.insert(CalendarContract.Reminders.CONTENT_URI, reminders);
