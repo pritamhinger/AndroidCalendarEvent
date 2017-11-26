@@ -3,10 +3,13 @@ package com.appdevelapp.samplealarmapp;
 import android.Manifest;
 import android.annotation.TargetApi;
 import android.app.Activity;
+import android.app.AlarmManager;
 import android.app.AlertDialog;
+import android.app.PendingIntent;
 import android.content.ContentResolver;
 import android.content.ContentValues;
 import android.content.DialogInterface;
+import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
@@ -32,8 +35,11 @@ public class MainActivity extends AppCompatActivity implements DatePickerDialog.
 
     public static final int MY_PERMISSIONS_REQUEST_WRITE_CALENDAR = 123;
     Button mShowDateTimeDialogButton;
+    Button mAddReminder;
 
     Calendar timeSelected = null;
+
+    Boolean isEvent = true;
 
     int year;
     int month;
@@ -49,10 +55,22 @@ public class MainActivity extends AppCompatActivity implements DatePickerDialog.
         setContentView(R.layout.activity_main);
 
         mShowDateTimeDialogButton = findViewById(R.id.btn_show_dateTimePicker);
+        mAddReminder = findViewById(R.id.btn_add_reminder);
+
         mShowDateTimeDialogButton.setOnClickListener(new View.OnClickListener() {
             @Override
-            public void onClick(View v) {
+            public void onClick(View view) {
                 Log.d(CLASS_TAG, "Button Clicked");
+                isEvent = true;
+                showDatePickerDialog();
+            }
+        });
+
+        mAddReminder.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                Log.d(CLASS_TAG, "Add Reminder Clicked");
+                isEvent = false;
                 showDatePickerDialog();
             }
         });
@@ -113,7 +131,23 @@ public class MainActivity extends AppCompatActivity implements DatePickerDialog.
         Log.d(CLASS_TAG, "Selected Date is : " + time);
         this.hour = hourOfDay;
         this.minute = minute;
-        setAlarm();
+        if(isEvent) {
+            setAlarm();
+        }
+        else {
+            setReminder();
+        }
+    }
+
+    private void setReminder(){
+        Calendar calendar = Calendar.getInstance();
+        calendar.set(this.year, this.month, this.day, this.hour, this.minute, 0);
+        timeSelected = calendar;
+        Intent intent1 = new Intent(MainActivity.this, AlarmReceiver.class);
+        intent1.putExtra("LoanName", "Title from Byaj");
+        PendingIntent pendingIntent = PendingIntent.getBroadcast(MainActivity.this, 0,intent1, PendingIntent.FLAG_UPDATE_CURRENT);
+        AlarmManager am = (AlarmManager) MainActivity.this.getSystemService(MainActivity.this.ALARM_SERVICE);
+        am.setRepeating(AlarmManager.RTC_WAKEUP, calendar.getTimeInMillis(), AlarmManager.INTERVAL_DAY, pendingIntent);
     }
 
     private void setAlarm(){
@@ -161,8 +195,8 @@ public class MainActivity extends AppCompatActivity implements DatePickerDialog.
 
         ContentValues reminders = new ContentValues();
         reminders.put(CalendarContract.Reminders.EVENT_ID, dbId);
-        reminders.put(CalendarContract.Reminders.METHOD, CalendarContract.Reminders.METHOD_ALERT);
-        reminders.put(CalendarContract.Reminders.MINUTES, 0);
+        reminders.put(CalendarContract.Reminders.METHOD, CalendarContract.Reminders.METHOD_ALARM);
+        reminders.put(CalendarContract.Reminders.MINUTES, 2);
 
         final Uri reminder = contentResolver.insert(CalendarContract.Reminders.CONTENT_URI, reminders);
 
